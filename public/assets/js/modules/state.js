@@ -6,7 +6,7 @@ const store = {
   route: 'dashboard',
   dashboard: null,
   globalSearch: '',
-  realtimeChannel: null
+  autoRefreshTimer: null
 };
 
 export function getState() {

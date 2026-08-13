@@ -1,31 +1,54 @@
-# API e funções protegidas
+# API protegida
 
-## Rotas Express
+Todas as respostas JSON usam `{ "ok": true, "data": ... }` ou `{ "ok": false, "error": ... }`.
+
+## Sessão
+
+| Método | Rota | Acesso | Finalidade |
+|---|---|---|---|
+| POST | `/api/auth/login` | Público, limitado | Valida e-mail/senha e cria cookie `HttpOnly`. |
+| GET | `/api/auth/session` | Autenticado | Retorna usuário e perfil atuais. |
+| POST | `/api/auth/logout` | Público | Invalida o cookie local. |
+| GET | `/api/config` | Público | Nome, fuso e tipo do banco; não expõe credenciais. |
+| GET | `/api/health` | Público | Testa processo e conexão MySQL. |
+
+O navegador autentica pelo cookie `constantinos_session`, com `SameSite=Strict`, `HttpOnly` e `Secure` em produção. Não há token no `localStorage`.
+
+## Dados e operações
+
+| Método | Rota | Acesso | Finalidade |
+|---|---|---|---|
+| POST | `/api/data/query` | Conforme perfil/recurso | Consultas e gravações com campos e tabelas permitidos por lista fechada. |
+| POST | `/api/operations/:name` | Conforme operação | Regras transacionais de hotelaria. |
+
+Operações disponíveis:
+
+- `get_dashboard_summary`
+- `is_room_available`
+- `transition_reservation`
+- `change_reservation_room`
+- `update_room_cleaning`
+- `set_room_operational_status`
+- `block_room_for_maintenance`
+- `complete_room_maintenance`
+- `record_sensitive_access`
+
+Reservas são validadas e gravadas na mesma transação que bloqueia a linha do quarto com `SELECT ... FOR UPDATE`. A consulta visual de disponibilidade não substitui essa verificação final.
+
+## Usuários
 
 | Método | Rota | Perfil | Finalidade |
 |---|---|---|---|
-| GET | `/api/config` | Público | URL e chave publicável do Supabase; nunca retorna secret key. |
-| GET | `/api/health` | Público | Estado do processo e conectividade com o banco. |
-| GET | `/api/admin/users` | Administrador | Lista perfis, e-mails e último acesso. |
-| POST | `/api/admin/users` | Administrador | Cria usuário confirmado e define perfil inicial. |
-| PATCH | `/api/admin/users/:id/role` | Administrador | Altera perfil/estado; impede autoalteração. |
-| POST | `/api/storage/signed-upload` | Administrador/recepção | Gera URL temporária para upload privado. |
-| POST | `/api/storage/signed-download` | Administrador/recepção | Gera URL temporária de leitura privada. |
+| GET | `/api/admin/users` | Administrador | Lista usuários sem hashes de senha. |
+| POST | `/api/admin/users` | Administrador | Cria usuário e hash `bcrypt`. |
+| PATCH | `/api/admin/users/:id/role` | Administrador | Altera perfil/estado e revoga a sessão anterior. |
 
-As rotas protegidas exigem `Authorization: Bearer <access_token>` do Supabase Auth.
+## Arquivos privados
 
-## RPCs PostgreSQL
+| Método | Rota | Perfil | Finalidade |
+|---|---|---|---|
+| POST | `/api/storage/upload` | Administrador/recepção | Recebe `multipart/form-data`, até 10 MB. |
+| POST | `/api/storage/download-url` | Administrador/recepção | Resolve um caminho privado para URL interna. |
+| GET | `/api/storage/files/:id` | Administrador/recepção | Entrega o arquivo somente com sessão válida. |
 
-| Função | Finalidade |
-|---|---|
-| `is_room_available` | Consulta segura de disponibilidade por período. |
-| `transition_reservation` | Confirma, faz check-in/check-out, cancela ou marca no-show com transição validada. |
-| `change_reservation_room` | Transfere a reserva e sincroniza os estados do quarto antigo/novo na mesma transação. |
-| `update_room_cleaning` | Limita a governança aos estados de limpeza autorizados. |
-| `set_room_operational_status` | Limita bloqueios manuais aos estados seguro `available`/`blocked`. |
-| `block_room_for_maintenance` | Cria manutenção e bloqueia o quarto na mesma transação. |
-| `complete_room_maintenance` | Conclui manutenção e envia o quarto para limpeza. |
-| `record_sensitive_access` | Audita abertura dos dados completos de um hóspede. |
-| `get_dashboard_summary` | Retorna somente contagens operacionais, sem documentos pessoais. |
-
-Inserções simultâneas continuam protegidas pela constraint `reservations_no_active_overlap`, independentemente do JavaScript ou da RPC de consulta.
+Formatos permitidos: PDF, JPEG e PNG. Upload e download são auditados.

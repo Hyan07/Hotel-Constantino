@@ -1,4 +1,4 @@
-import { getSupabase } from '../modules/supabase.js';
+import { getDatabase } from '../modules/database.js';
 import { can, getState, setState } from '../modules/state.js';
 import { emptyState, friendlyError, toast } from '../modules/ui.js';
 import { escapeHtml, formatDate, formatMoney, formatTime, label, statusClass } from '../modules/format.js';
@@ -31,20 +31,20 @@ function roomMixRow(labelText, value, total, color) {
 }
 
 async function loadDashboardData() {
-  const supabase = await getSupabase();
+  const database = await getDatabase();
   const now = new Date();
   const weekAhead = new Date(now.getTime() + 7 * 86_400_000);
 
   const [summaryResult, upcomingResult, alertsResult] = await Promise.all([
-    supabase.rpc('get_dashboard_summary'),
-    supabase.from('reservation_overview')
+    database.rpc('get_dashboard_summary'),
+    database.from('reservation_overview')
       .select('id, code, status, check_in_at, check_out_at, guest_name, room_number, total_amount, payment_status')
       .gte('check_out_at', now.toISOString())
       .lte('check_in_at', weekAhead.toISOString())
       .in('status', ['pending', 'confirmed', 'checked_in'])
       .order('check_in_at')
       .limit(8),
-    supabase.from('reservation_overview')
+    database.from('reservation_overview')
       .select('id, code, guest_name, room_number, total_amount, amount_paid, payment_status, check_in_at')
       .in('payment_status', ['pending', 'partial'])
       .in('status', ['pending', 'confirmed', 'checked_in'])

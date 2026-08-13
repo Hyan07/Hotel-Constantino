@@ -1,11 +1,11 @@
-import { signIn, signOut, loadSession, watchAuth } from './modules/auth.js';
-import { getSupabase } from './modules/supabase.js';
+import { signIn, signOut, loadSession } from './modules/auth.js';
+import { getDatabase } from './modules/database.js';
 import { getState, roleLabels, setState } from './modules/state.js';
 import { friendlyError, openDrawer, pageLoading, toast } from './modules/ui.js';
 import { escapeHtml, formatDateTime, formatMoney, initials, label, statusClass } from './modules/format.js';
 import { renderDashboard } from './pages/dashboard.js';
 import { openGuestForm, renderGuests } from './pages/guests.js';
-import { openReservationForm, renderReservations } from './pages/reservations.js';
+import { openReservationDetails, openReservationForm, renderReservations } from './pages/reservations.js';
 import { renderRooms } from './pages/rooms.js';
 import { renderUsers } from './pages/users.js';
 
@@ -25,7 +25,7 @@ const routes = {
 };
 
 let notificationData = { upcoming: [], alerts: [] };
-let realtimeTimer;
+let refreshDebounce;
 
 function showLogin(message = '') {
   loginView.hidden = false;
@@ -79,21 +79,18 @@ async function navigate(routeName, options = {}) {
   await selected.render(main, options);
 }
 
-async function setupRealtime() {
-  const supabase = await getSupabase();
-  if (getState().realtimeChannel) await supabase.removeChannel(getState().realtimeChannel);
+async function setupAutoRefresh() {
+  if (getState().autoRefreshTimer) clearInterval(getState().autoRefreshTimer);
   const refresh = () => {
-    clearTimeout(realtimeTimer);
-    realtimeTimer = setTimeout(() => {
+    if (document.hidden || document.querySelector('#drawer')?.open) return;
+    clearTimeout(refreshDebounce);
+    refreshDebounce = setTimeout(() => {
       const route = getState().route;
       if (['dashboard','rooms','reservations'].includes(route)) navigate(route);
-    }, 650);
+    }, 250);
   };
-  const channel = supabase.channel('hotel-operation')
-    .on('postgres_changes', { event: '*', schema: 'public', table: 'rooms' }, refresh)
-    .on('postgres_changes', { event: '*', schema: 'public', table: 'reservations' }, refresh)
-    .subscribe();
-  setState({ realtimeChannel: channel });
+  const timer = setInterval(refresh, 30_000);
+  setState({ autoRefreshTimer: timer });
 }
 
 async function handleGlobalSearch(query) {
@@ -103,13 +100,13 @@ async function handleGlobalSearch(query) {
   if (filterValue.length < 2) return toast('Use letras ou números na pesquisa.', { title: 'Pesquisa', type: 'error' });
   openDrawer({ title: `Resultados para “${value}”`, eyebrow: 'Pesquisa no sistema', content: pageLoading('Pesquisando…') });
   try {
-    const supabase = await getSupabase();
+    const database = await getDatabase();
     const role = getState().profile.role;
-    const roomQuery = supabase.from('room_overview').select('id, room_number, category_name, current_status').or(`room_number.ilike.%${filterValue}%,category_name.ilike.%${filterValue}%`).limit(8);
+    const roomQuery = database.from('room_overview').select('id, room_number, category_name, current_status').or(`room_number.ilike.%${filterValue}%,category_name.ilike.%${filterValue}%`).limit(8);
     const queries = [roomQuery];
     if (['admin','reception'].includes(role)) {
-      queries.push(supabase.from('reservation_overview').select('id, code, guest_name, room_number, status, check_in_at').or(`code.ilike.%${filterValue}%,guest_name.ilike.%${filterValue}%,guest_phone.ilike.%${filterValue}%`).limit(10));
-      queries.push(supabase.from('guests').select('id, full_name, phone, email').or(`full_name.ilike.%${filterValue}%,phone.ilike.%${filterValue}%,email.ilike.%${filterValue}%`).is('deleted_at', null).limit(10));
+      queries.push(database.from('reservation_overview').select('id, code, guest_name, room_number, status, check_in_at').or(`code.ilike.%${filterValue}%,guest_name.ilike.%${filterValue}%,guest_phone.ilike.%${filterValue}%`).limit(10));
+      queries.push(database.from('guests').select('id, full_name, phone, email').or(`full_name.ilike.%${filterValue}%,phone.ilike.%${filterValue}%,email.ilike.%${filterValue}%`).is('deleted_at', null).limit(10));
     }
     const results = await Promise.all(queries);
     results.forEach((result) => { if (result.error) throw result.error; });
@@ -141,7 +138,7 @@ function openNotifications() {
 
 function openUserPanel() {
   const profile = getState().profile;
-  openDrawer({ title: profile.full_name, eyebrow: 'Usuário conectado', content: `<div class="detail-grid"><div class="detail-item"><small>Perfil de acesso</small><strong>${escapeHtml(roleLabels[profile.role])}</strong></div><div class="detail-item"><small>Situação</small><strong>Ativo</strong></div></div><div class="alert alert--success">Sua sessão está protegida pelo Supabase Auth.</div><div class="form-actions"><button id="user-panel-signout" class="button button--secondary">Sair do sistema</button></div>`, onOpen(root) { root.querySelector('#user-panel-signout').addEventListener('click', async () => { document.querySelector('#drawer').close(); await signOut(); showLogin(); }); } });
+  openDrawer({ title: profile.full_name, eyebrow: 'Usuário conectado', content: `<div class="detail-grid"><div class="detail-item"><small>Perfil de acesso</small><strong>${escapeHtml(roleLabels[profile.role])}</strong></div><div class="detail-item"><small>Situação</small><strong>Ativo</strong></div></div><div class="alert alert--success">Sua sessão está protegida por cookie seguro e autenticação no servidor.</div><div class="form-actions"><button id="user-panel-signout" class="button button--secondary">Sair do sistema</button></div>`, onOpen(root) { root.querySelector('#user-panel-signout').addEventListener('click', async () => { document.querySelector('#drawer').close(); await signOut(); showLogin(); }); } });
 }
 
 function bindStaticEvents() {
@@ -159,7 +156,7 @@ function bindStaticEvents() {
     submit.disabled = true; submit.innerHTML = '<span class="spinner"></span>Entrando…';
     try {
       await signIn(loginForm.elements.email.value.trim(), loginForm.elements.password.value);
-      await loadSession(); showApp(); await navigate('dashboard'); await setupRealtime();
+      await loadSession(); showApp(); await navigate('dashboard'); await setupAutoRefresh();
     } catch (error) {
       alert.textContent = /Invalid login credentials/i.test(error.message) ? 'E-mail ou senha incorretos.' : friendlyError(error);
       alert.hidden = false;
@@ -180,7 +177,7 @@ function bindStaticEvents() {
   window.addEventListener('hotel:new-reservation', async (event) => { await navigate('reservations'); await openReservationForm(null, event.detail?.guestId ?? null); });
   window.addEventListener('hotel:new-guest', async (event) => { await navigate('guests'); openGuestForm(null, event.detail ?? {}); });
   window.addEventListener('hotel:open-reservation', async (event) => {
-    const { openReservationDetails } = await import('./pages/reservations.js'); openReservationDetails(event.detail.id);
+    openReservationDetails(event.detail.id);
   });
   window.addEventListener('hotel:notifications', (event) => {
     notificationData = event.detail;
@@ -202,9 +199,8 @@ async function init() {
     showApp();
     const requested = location.hash.slice(1);
     await navigate(routes[requested] ? requested : 'dashboard');
-    await setupRealtime();
+    await setupAutoRefresh();
   } catch (error) { showLogin(friendlyError(error)); }
-  await watchAuth((session) => { if (!session) showLogin('Sua sessão foi encerrada. Entre novamente.'); });
 }
 
 init();

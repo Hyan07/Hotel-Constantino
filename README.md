@@ -1,47 +1,58 @@
 # Constantino’s Hotel — Sistema de Gestão
 
-Aplicação web interna para a operação do Constantino’s Hotel, em Passos–MG. O projeto reúne reservas, quartos, hóspedes, pagamentos, manutenção, limpeza, usuários e auditoria em uma interface responsiva.
+Aplicação web interna para reservas, quartos, hóspedes, pagamentos, manutenção, limpeza, usuários e auditoria. A versão 2.0 usa **Node.js/Express + MySQL** e está preparada para uma aplicação Node.js com banco MySQL na Hostinger.
 
 ## O que está pronto
 
-- Painel com ocupação, situação dos quartos, agenda de chegadas/saídas e alertas financeiros.
-- Reservas em lista, cartões e calendário, com filtros, comprovante para impressão, pagamentos, check-in e check-out.
-- Proteção PostgreSQL contra sobreposição de reservas ativas, inclusive em requisições simultâneas.
-- Quartos, categorias, limpeza em tempo real e bloqueios transacionais para manutenção.
-- Hóspedes com CPF validado, detecção de duplicidade, histórico, acessibilidade e documentos privados.
-- Supabase Auth com perfis de administrador, recepção, governança/limpeza e consulta.
-- RLS em todas as tabelas expostas, funções protegidas e auditoria de alterações/acessos sensíveis.
-- Back-end Node.js/Express para administração de usuários, URLs temporárias de arquivos e operações com chave secreta.
-- Interface inspirada no DashStack, com sidebar clara, cards de indicadores, painel visual de ocupação e identidade azul do hotel.
-- Layout sem rolagem horizontal no celular, tabelas em cartões, navegação móvel e suporte a teclado.
+- Interface responsiva inspirada no DashStack, com painel de ocupação e navegação móvel.
+- Reservas em lista, cartões e calendário, com check-in, check-out, cancelamento, troca de quarto, pagamento e comprovante.
+- Bloqueio transacional contra duas reservas ativas para o mesmo quarto e período.
+- Quartos, categorias, limpeza, bloqueios manuais e manutenção.
+- Hóspedes com validação de CPF, detecção de duplicidade, histórico e documentos privados.
+- Autenticação própria com senha em `bcrypt`, sessão em cookie `HttpOnly` e perfis por função.
+- MySQL acessível somente pelo processo Node.js; nenhuma credencial do banco vai para o navegador.
+- Arquivos privados armazenados em `LONGBLOB`, protegidos por sessão e auditoria.
+- Atualização automática das telas operacionais a cada 30 segundos.
 
 ## Arquitetura
 
 ```text
-public/                    Front-end HTML, CSS e JavaScript modular
-src/                       API Node.js/Express
-  middleware/              Autenticação, perfis e erros
-  routes/                  Configuração pública, administração e Storage
-  services/                Auditoria de operações do servidor
-supabase/migrations/       Esquema, funções, RLS, Storage e dados de demonstração
-supabase/tests/            Testes SQL das regras críticas
-scripts/                   Criação segura do administrador e verificação do projeto
-tests/                     Testes automatizados do servidor
-docs/                      Configuração, API, segurança e deploy
+public/                       HTML, CSS e JavaScript modular
+src/                          API Node.js/Express
+  lib/db.js                   Pool privado do MySQL
+  middleware/                 Sessão, perfis e erros
+  routes/                     Auth, dados, operações, usuários e arquivos
+  services/                   Regras transacionais e auditoria
+database/mysql/001_install.sql  Tabelas, índices, views e quartos iniciais
+scripts/                      Migração, primeiro admin e verificações
+tests/                        Testes automatizados
+docs/                         MySQL, API, segurança e deploy
 ```
 
-O navegador recebe somente `SUPABASE_PUBLISHABLE_KEY`. `SUPABASE_SECRET_KEY` é validada e utilizada exclusivamente pelo processo Node.js.
+## Início rápido local
 
-## Executar localmente
+Requisitos: Node.js 20+ e MySQL 8 ou MariaDB 10.6+.
 
-Requisitos: Node.js 20+ e um projeto Supabase.
-
-1. Copie `.env.example` para `.env` e preencha as três variáveis do Supabase.
-2. Aplique as migrations em ordem, conforme [docs/SUPABASE_SETUP.md](docs/SUPABASE_SETUP.md).
-3. Instale e execute:
+1. Copie `.env.example` para `.env` e preencha o MySQL e `SESSION_SECRET`.
+2. Prepare o banco:
 
 ```bash
 npm install
+npm run db:migrate
+```
+
+3. Crie o primeiro administrador com variáveis temporárias:
+
+```bash
+INITIAL_ADMIN_EMAIL="admin@hotel.com.br" \
+INITIAL_ADMIN_FULL_NAME="Administrador do Hotel" \
+INITIAL_ADMIN_PASSWORD="SenhaForte#2026" \
+npm run bootstrap:admin
+```
+
+4. Valide e execute:
+
+```bash
 npm test
 npm run lint
 npm start
@@ -49,22 +60,24 @@ npm start
 
 Acesse `http://localhost:3000`.
 
-## Primeiro administrador
+Localmente, passe as variáveis somente no comando. Na Hostinger, elas podem ser cadastradas temporariamente no primeiro deploy e devem ser removidas logo após o primeiro login. A senha deve ter pelo menos 12 caracteres, maiúscula, minúscula, número e símbolo.
 
-Depois das migrations e com o `.env` configurado, execute uma única vez com variáveis temporárias:
+## Hostinger
 
-```bash
-INITIAL_ADMIN_EMAIL="admin@hotel.com.br" \
-INITIAL_ADMIN_FULL_NAME="Administrador do Hotel" \
-INITIAL_ADMIN_PASSWORD="uma-senha-forte" \
-npm run bootstrap:admin
-```
+O projeto precisa ser publicado como **Node.js Web App**, não extraído diretamente em `public_html`. O Express serve a interface e executa autenticação, regras de reserva e conexão privada com o MySQL.
 
-Use uma senha exclusiva com pelo menos 12 caracteres, maiúscula, minúscula, número e símbolo. Não grave essas três variáveis no `.env` de produção.
-
-## Documentação
-
-- [Configuração do Supabase](docs/SUPABASE_SETUP.md)
-- [Deploy na Hostinger](docs/DEPLOY_HOSTINGER.md)
-- [Rotas e funções](docs/API.md)
+- [Criar e instalar o MySQL](docs/MYSQL_SETUP.md)
+- [Deploy pela Hostinger e GitHub](docs/DEPLOY_HOSTINGER.md)
+- [Rotas da API](docs/API.md)
 - [Segurança e LGPD](docs/SECURITY.md)
+
+## Comandos
+
+| Comando | Finalidade |
+|---|---|
+| `npm start` | Inicia a aplicação em produção. |
+| `npm run dev` | Desenvolvimento com recarga. |
+| `npm run db:migrate` | Importa/atualiza a estrutura MySQL. |
+| `npm run bootstrap:admin` | Cria o primeiro administrador. |
+| `npm test` | Executa os testes automatizados. |
+| `npm run lint` | Verifica estrutura, segredos e controles críticos. |

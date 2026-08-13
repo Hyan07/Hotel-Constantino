@@ -1,4 +1,4 @@
-import { getSupabase } from '../modules/supabase.js';
+import { getDatabase } from '../modules/database.js';
 import { can, getState } from '../modules/state.js';
 import {
   emptyState, friendlyError, openDrawer, closeDrawer, confirmAction, setDrawerBusy,
@@ -29,12 +29,12 @@ const pageState = {
 const activeStatuses = ['pre_reservation', 'pending', 'confirmed', 'checked_in'];
 
 async function loadData() {
-  const supabase = await getSupabase();
+  const database = await getDatabase();
   const [reservations, rooms, guests, categories] = await Promise.all([
-    supabase.from('reservation_overview').select('*').order('check_in_at', { ascending: false }).limit(600),
-    supabase.from('room_overview').select('*').order('room_number'),
-    supabase.from('guests').select('id, full_name, document_type, document_number, phone, email').is('deleted_at', null).order('full_name').limit(1000),
-    supabase.from('room_categories').select('*').eq('active', true).order('name')
+    database.from('reservation_overview').select('*').order('check_in_at', { ascending: false }).limit(600),
+    database.from('room_overview').select('*').order('room_number'),
+    database.from('guests').select('id, full_name, document_type, document_number, phone, email').is('deleted_at', null).order('full_name').limit(1000),
+    database.from('room_categories').select('*').eq('active', true).order('name')
   ]);
   if (reservations.error) throw reservations.error;
   if (rooms.error) throw rooms.error;
@@ -175,8 +175,8 @@ async function reservationFormHtml(reservation = null, preferredGuestId = null) 
   const period = defaultPeriod();
   const companionIds = new Set();
   if (reservation) {
-    const supabase = await getSupabase();
-    const { data } = await supabase.from('reservation_guests').select('guest_id, is_responsible').eq('reservation_id', reservation.id);
+    const database = await getDatabase();
+    const { data } = await database.from('reservation_guests').select('guest_id, is_responsible').eq('reservation_id', reservation.id);
     (data ?? []).filter((item) => !item.is_responsible).forEach((item) => companionIds.add(item.guest_id));
   }
   const selectedGuest = preferredGuestId || reservation?.responsible_guest_id || '';
@@ -231,8 +231,8 @@ export async function openReservationForm(reservationId = null, preferredGuestId
       availability.textContent = 'A disponibilidade será validada pelo banco antes de salvar.';
       availability.className = '';
       if (roomSelect.value && nights > 0) {
-        const supabase = await getSupabase();
-        const { data, error } = await supabase.rpc('is_room_available', {
+        const database = await getDatabase();
+        const { data, error } = await database.rpc('is_room_available', {
           p_room_id: roomSelect.value,
           p_check_in: localInputToIso(form.elements.check_in_at.value),
           p_check_out: localInputToIso(form.elements.check_out_at.value),
@@ -264,8 +264,8 @@ export async function openReservationForm(reservationId = null, preferredGuestId
       if (!nightsBetween(checkIn, checkOut)) return setFormError(form, 'A data de saída deve ser posterior à entrada.');
       setDrawerBusy(true, reservation ? 'Salvando…' : 'Criando…');
       try {
-        const supabase = await getSupabase();
-        const { data: available, error: availabilityError } = await supabase.rpc('is_room_available', {
+        const database = await getDatabase();
+        const { data: available, error: availabilityError } = await database.rpc('is_room_available', {
           p_room_id: roomSelect.value, p_check_in: checkIn, p_check_out: checkOut, p_exclude_reservation: reservation?.id ?? null
         });
         if (availabilityError) throw availabilityError;
@@ -288,18 +288,18 @@ export async function openReservationForm(reservationId = null, preferredGuestId
         };
         if (!reservation) payload.status = form.elements.status.value;
         const query = reservation
-          ? supabase.from('reservations').update(payload).eq('id', reservation.id).select().single()
-          : supabase.from('reservations').insert(payload).select().single();
+          ? database.from('reservations').update(payload).eq('id', reservation.id).select().single()
+          : database.from('reservations').insert(payload).select().single();
         const { data: saved, error } = await query;
         if (error) throw error;
 
         const selectedCompanions = Array.from(form.elements.companions.selectedOptions).map((option) => option.value).filter((id) => id !== payload.responsible_guest_id);
         if (reservation) {
-          const { error: deleteError } = await supabase.from('reservation_guests').delete().eq('reservation_id', saved.id).eq('is_responsible', false);
+          const { error: deleteError } = await database.from('reservation_guests').delete().eq('reservation_id', saved.id).eq('is_responsible', false);
           if (deleteError) throw deleteError;
         }
         if (selectedCompanions.length) {
-          const { error: companionError } = await supabase.from('reservation_guests').insert(selectedCompanions.map((guestId) => ({ reservation_id: saved.id, guest_id: guestId, is_responsible: false })));
+          const { error: companionError } = await database.from('reservation_guests').insert(selectedCompanions.map((guestId) => ({ reservation_id: saved.id, guest_id: guestId, is_responsible: false })));
           if (companionError) throw companionError;
         }
         toast(reservation ? 'Reserva atualizada com sucesso.' : `Reserva ${saved.code} criada com sucesso.`);
@@ -325,8 +325,8 @@ async function transitionReservation(reservation, action) {
   const accepted = await confirmAction({ title: copy[0], message: copy[1], confirmLabel: copy[2], danger: copy[3] });
   if (!accepted) return;
   try {
-    const supabase = await getSupabase();
-    const { error } = await supabase.rpc('transition_reservation', { p_reservation_id: reservation.id, p_action: action, p_reason: null });
+    const database = await getDatabase();
+    const { error } = await database.rpc('transition_reservation', { p_reservation_id: reservation.id, p_action: action, p_reason: null });
     if (error) throw error;
     toast(`${copy[0]} concluído.`);
     closeDrawer();
@@ -345,8 +345,8 @@ function cancelReservation(reservation) {
       form.addEventListener('submit', async (event) => {
         event.preventDefault(); if (!form.reportValidity()) return; setDrawerBusy(true, 'Cancelando…');
         try {
-          const supabase = await getSupabase();
-          const { error } = await supabase.rpc('transition_reservation', { p_reservation_id: reservation.id, p_action: 'cancel', p_reason: form.elements.reason.value });
+          const database = await getDatabase();
+          const { error } = await database.rpc('transition_reservation', { p_reservation_id: reservation.id, p_action: 'cancel', p_reason: form.elements.reason.value });
           if (error) throw error;
           toast('Reserva cancelada e quarto liberado.'); closeDrawer(); await refreshReservations();
         } catch (error) { setFormError(form, friendlyError(error)); } finally { setDrawerBusy(false); }
@@ -366,8 +366,8 @@ function registerPayment(reservation) {
       form.addEventListener('submit', async (event) => {
         event.preventDefault(); if (!form.reportValidity()) return; setDrawerBusy(true, 'Registrando…');
         try {
-          const supabase = await getSupabase();
-          const { error } = await supabase.from('payments').insert({
+          const database = await getDatabase();
+          const { error } = await database.from('payments').insert({
             reservation_id: reservation.id, amount: Number(form.elements.amount.value), method: form.elements.method.value,
             status: 'received', paid_at: new Date().toISOString(), transaction_reference: form.elements.transaction_reference.value.trim() || null,
             notes: form.elements.notes.value.trim() || null
@@ -390,8 +390,8 @@ function changeOccupiedRoom(reservation) {
       form.addEventListener('submit', async (event) => {
         event.preventDefault(); if (!form.reportValidity()) return; setDrawerBusy(true, 'Alterando…');
         try {
-          const supabase = await getSupabase();
-          const { error } = await supabase.rpc('change_reservation_room', { p_reservation_id: reservation.id, p_new_room_id: form.elements.room_id.value });
+          const database = await getDatabase();
+          const { error } = await database.rpc('change_reservation_room', { p_reservation_id: reservation.id, p_new_room_id: form.elements.room_id.value });
           if (error) throw error;
           toast('Quarto alterado com segurança.'); closeDrawer(); await refreshReservations();
         } catch (error) { setFormError(form, friendlyError(error)); } finally { setDrawerBusy(false); }
@@ -412,8 +412,8 @@ async function showHistory(reservation) {
   if (!can('admin')) return;
   openDrawer({ title: 'Histórico de alterações', eyebrow: reservation.code, content: '<div class="page-loading"><span class="spinner"></span>Carregando histórico…</div>' });
   try {
-    const supabase = await getSupabase();
-    const { data, error } = await supabase.from('audit_logs').select('id, action, old_values, new_values, created_at, user_id').eq('table_name', 'reservations').eq('record_id', reservation.id).order('created_at', { ascending: false });
+    const database = await getDatabase();
+    const { data, error } = await database.from('audit_logs').select('id, action, old_values, new_values, created_at, user_id').eq('table_name', 'reservations').eq('record_id', reservation.id).order('created_at', { ascending: false });
     if (error) throw error;
     document.querySelector('#drawer-content').innerHTML = data?.length ? `<div class="timeline">${data.map((item) => `<div class="timeline-item"><span class="timeline-time">${formatDate(item.created_at).slice(0,5)}<br>${formatTime(item.created_at)}</span><span class="timeline-dot"></span><div class="timeline-copy"><strong>${escapeHtml(item.action)}</strong><small>${formatDateTime(item.created_at)} · Situação: ${label(item.new_values?.status || item.old_values?.status)}</small></div></div>`).join('')}</div>` : emptyState({ title: 'Sem alterações registradas', message: 'Ainda não há eventos de auditoria para esta reserva.' });
   } catch (error) { document.querySelector('#drawer-content').innerHTML = emptyState({ icon: '!', title: 'Histórico indisponível', message: friendlyError(error) }); }
