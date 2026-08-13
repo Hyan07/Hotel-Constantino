@@ -85,7 +85,7 @@ export async function listStays(query) {
       `SELECT COUNT(*) AS total FROM stays ${where}`,
       parameters,
     );
-    const [rows] = await connection.query(
+    const [rows] = await connection.execute(
       `SELECT stays.id, stays.reservation_id AS reservationId, reservations.code AS reservationCode,
               reservations.primary_guest_id AS primaryGuestId, guests.full_name AS primaryGuestName,
               stays.room_id AS roomId, rooms.room_number AS roomNumber, stays.status,
@@ -460,7 +460,7 @@ export async function listCharges(query) {
       `SELECT COUNT(*) AS total FROM charges ${where}`,
       parameters,
     );
-    const [rows] = await connection.query(
+    const [rows] = await connection.execute(
       `SELECT charges.id, charges.stay_id AS stayId, charges.category, charges.description,
               charges.quantity, charges.unit_amount_cents AS unitAmountCents,
               charges.total_cents AS totalCents, charges.occurred_at AS occurredAt,
@@ -482,7 +482,7 @@ export async function listPayments(query) {
       `SELECT COUNT(*) AS total FROM payments ${where}`,
       parameters,
     );
-    const [rows] = await connection.query(
+    const [rows] = await connection.execute(
       `SELECT payments.id, payments.stay_id AS stayId, payments.amount_cents AS amountCents,
               payments.method, payments.reference, payments.status, payments.received_at AS receivedAt
          FROM payments ${where} ORDER BY payments.received_at DESC LIMIT ? OFFSET ?`,

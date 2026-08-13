@@ -44,7 +44,7 @@ export async function listHousekeeping(query) {
       `SELECT COUNT(*) AS total FROM housekeeping_tasks ${where}`,
       parameters,
     );
-    const [rows] = await connection.query(
+    const [rows] = await connection.execute(
       `SELECT housekeeping_tasks.id, housekeeping_tasks.room_id AS roomId,
               rooms.room_number AS roomNumber, housekeeping_tasks.task_type AS taskType,
               housekeeping_tasks.status, housekeeping_tasks.priority, housekeeping_tasks.notes,

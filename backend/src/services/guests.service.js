@@ -35,7 +35,7 @@ export async function listGuests(query) {
       `SELECT COUNT(*) AS total FROM guests WHERE ${where}`,
       parameters,
     );
-    const [rows] = await connection.query(
+    const [rows] = await connection.execute(
       `SELECT id, full_name AS fullName, document_type AS documentType,
               document_number AS documentNumber, birth_date AS birthDate, email, phone,
               city, state_code AS stateCode, country_code AS countryCode, notes, version,
