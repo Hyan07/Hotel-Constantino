@@ -19,7 +19,9 @@ guestsRouter.get(
   '/',
   authorize('guests.read'),
   validate(guestListSchema, 'query'),
-  asyncHandler(async (request, response) => response.json(await listGuests(request.query))),
+  asyncHandler(async (request, response) =>
+    response.json(await listGuests(request.validated.query)),
+  ),
 );
 guestsRouter.post(
   '/',

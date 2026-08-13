@@ -22,7 +22,9 @@ housekeepingRouter.get(
   '/',
   authorize('housekeeping.read'),
   validate(housekeepingListSchema, 'query'),
-  asyncHandler(async (request, response) => response.json(await listHousekeeping(request.query))),
+  asyncHandler(async (request, response) =>
+    response.json(await listHousekeeping(request.validated.query)),
+  ),
 );
 housekeepingRouter.post(
   '/',

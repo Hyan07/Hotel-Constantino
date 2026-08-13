@@ -12,6 +12,6 @@ reportsRouter.get(
   authorize('reports.read'),
   validate(reportSchema, 'query'),
   asyncHandler(async (request, response) =>
-    response.json({ data: await getReports(request.query) }),
+    response.json({ data: await getReports(request.validated.query) }),
   ),
 );

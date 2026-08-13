@@ -26,7 +26,9 @@ staysRouter.get(
   '/',
   authorize('stays.read'),
   validate(stayListSchema, 'query'),
-  asyncHandler(async (request, response) => response.json(await listStays(request.query))),
+  asyncHandler(async (request, response) =>
+    response.json(await listStays(request.validated.query)),
+  ),
 );
 staysRouter.get(
   '/:id',

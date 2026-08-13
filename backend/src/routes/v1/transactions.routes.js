@@ -12,11 +12,15 @@ chargesRouter.get(
   '/',
   authorize('stays.read'),
   validate(transactionListSchema, 'query'),
-  asyncHandler(async (request, response) => response.json(await listCharges(request.query))),
+  asyncHandler(async (request, response) =>
+    response.json(await listCharges(request.validated.query)),
+  ),
 );
 paymentsRouter.get(
   '/',
   authorize('finance.read'),
   validate(transactionListSchema, 'query'),
-  asyncHandler(async (request, response) => response.json(await listPayments(request.query))),
+  asyncHandler(async (request, response) =>
+    response.json(await listPayments(request.validated.query)),
+  ),
 );

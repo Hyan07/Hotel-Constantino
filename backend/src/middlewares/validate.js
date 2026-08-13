@@ -10,7 +10,11 @@ export function validate(schema, source = 'body') {
       }));
       return next(unprocessable('Revise os campos informados.', details));
     }
-    request[source] = result.data;
+    request.validated = {
+      ...(request.validated ?? {}),
+      [source]: result.data,
+    };
+    if (source !== 'query') request[source] = result.data;
     return next();
   };
 }

@@ -30,7 +30,9 @@ usersRouter.get(
   '/',
   authorize('users.read'),
   validate(paginationSchema, 'query'),
-  asyncHandler(async (request, response) => response.json(await listUsers(request.query))),
+  asyncHandler(async (request, response) =>
+    response.json(await listUsers(request.validated.query)),
+  ),
 );
 usersRouter.post(
   '/',
@@ -54,5 +56,7 @@ auditRouter.get(
   '/',
   authorize('audit.read'),
   validate(auditListSchema, 'query'),
-  asyncHandler(async (request, response) => response.json(await listAuditLogs(request.query))),
+  asyncHandler(async (request, response) =>
+    response.json(await listAuditLogs(request.validated.query)),
+  ),
 );

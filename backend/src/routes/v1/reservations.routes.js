@@ -28,7 +28,9 @@ reservationsRouter.get(
   '/',
   authorize('reservations.read'),
   validate(reservationListSchema, 'query'),
-  asyncHandler(async (request, response) => response.json(await listReservations(request.query))),
+  asyncHandler(async (request, response) =>
+    response.json(await listReservations(request.validated.query)),
+  ),
 );
 reservationsRouter.post(
   '/',

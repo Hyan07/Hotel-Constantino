@@ -21,7 +21,9 @@ financeRouter.get(
   '/',
   authorize('finance.read'),
   validate(financeListSchema, 'query'),
-  asyncHandler(async (request, response) => response.json(await listFinance(request.query))),
+  asyncHandler(async (request, response) =>
+    response.json(await listFinance(request.validated.query)),
+  ),
 );
 financeRouter.post(
   '/',

@@ -25,7 +25,9 @@ roomsRouter.get(
   '/',
   authorize('rooms.read'),
   validate(roomListSchema, 'query'),
-  asyncHandler(async (request, response) => response.json(await listRooms(request.query))),
+  asyncHandler(async (request, response) =>
+    response.json(await listRooms(request.validated.query)),
+  ),
 );
 roomsRouter.post(
   '/',
