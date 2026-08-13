@@ -1,0 +1,32 @@
+{
+  "name": "constantinos-hotel-management",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Sistema interno de gestão do Constantino's Hotel",
+  "type": "module",
+  "main": "src/server.js",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "dev": "node scripts/dev-server.js",
+    "start": "node src/server.js",
+    "test": "node --test",
+    "test:db": "supabase test db",
+    "lint": "node scripts/check-project.js",
+    "bootstrap:admin": "node scripts/bootstrap-admin.js"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.55.0",
+    "compression": "^1.8.1",
+    "dotenv": "^17.2.1",
+    "express": "^5.1.0",
+    "express-rate-limit": "^8.0.1",
+    "helmet": "^8.1.0",
+    "zod": "^4.0.17"
+  },
+  "devDependencies": {
+    "supertest": "^7.1.4",
+    "vite": "^7.1.2"
+  }
+}
