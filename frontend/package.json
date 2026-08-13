@@ -1,0 +1,19 @@
+{
+  "name": "@constantinos-hotel/frontend",
+  "version": "2.0.0-alpha.2",
+  "private": true,
+  "description": "Frontend em HTML, CSS e JavaScript do Constantino's Hotel.",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "devDependencies": {
+    "vite": "^8.2.1"
+  },
+  "dependencies": {
+    "@fontsource/dm-serif-display": "^5.3.0",
+    "@fontsource/manrope": "^5.3.0"
+  }
+}
