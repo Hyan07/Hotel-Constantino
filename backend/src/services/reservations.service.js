@@ -84,7 +84,7 @@ export async function listReservations(query) {
         WHERE ${where}`,
       parameters,
     );
-    const [rows] = await connection.execute(
+    const [rows] = await connection.query(
       `SELECT reservations.id, reservations.code,
               reservations.primary_guest_id AS primaryGuestId, guests.full_name AS primaryGuestName,
               reservations.room_id AS roomId, rooms.room_number AS roomNumber,

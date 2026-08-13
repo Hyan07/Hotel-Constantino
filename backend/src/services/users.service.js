@@ -11,7 +11,7 @@ export async function listUsers(query) {
     const [[count]] = await connection.execute(
       'SELECT COUNT(*) AS total FROM users WHERE deleted_at IS NULL',
     );
-    const [rows] = await connection.execute(
+    const [rows] = await connection.query(
       `SELECT users.id, users.full_name AS fullName, users.email, users.status, users.version,
               users.last_login_at AS lastLoginAt, users.created_at AS createdAt,
               GROUP_CONCAT(DISTINCT roles.code ORDER BY roles.code) AS roleCodes
@@ -191,7 +191,7 @@ export async function listAuditLogs(query) {
       `SELECT COUNT(*) AS total FROM audit_logs ${where}`,
       parameters,
     );
-    const [rows] = await connection.execute(
+    const [rows] = await connection.query(
       `SELECT audit_logs.id, audit_logs.actor_user_id AS actorUserId,
               users.full_name AS actorName, audit_logs.action,
               audit_logs.entity_type AS entityType, audit_logs.entity_id AS entityId,

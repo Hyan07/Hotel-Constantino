@@ -39,7 +39,7 @@ export async function listFinance(query) {
          FROM financial_entries ${where}`,
       parameters,
     );
-    const [rows] = await connection.execute(
+    const [rows] = await connection.query(
       `SELECT id, direction, category, description, amount_cents AS amountCents,
               occurred_on AS occurredOn, stay_id AS stayId, payment_id AS paymentId,
               status, version, created_at AS createdAt, updated_at AS updatedAt

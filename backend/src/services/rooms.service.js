@@ -40,7 +40,7 @@ export async function listRooms(query) {
       `SELECT COUNT(*) AS total FROM rooms WHERE ${where}`,
       parameters,
     );
-    const [rows] = await connection.execute(
+    const [rows] = await connection.query(
       `SELECT id, room_number AS roomNumber, category, floor, capacity,
               base_rate_cents AS baseRateCents, status, amenities, notes, version,
               created_at AS createdAt, updated_at AS updatedAt
