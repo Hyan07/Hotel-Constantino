@@ -1,5 +1,5 @@
 import { backendFetch } from '../modules/api.js';
-import { getSupabase } from '../modules/supabase.js';
+import { getDatabase } from '../modules/database.js';
 import { can } from '../modules/state.js';
 import {
   closeDrawer, emptyState, friendlyError, openDrawer, setDrawerBusy,
@@ -13,8 +13,8 @@ import {
 const guestState = { container: null, guests: [], reservations: [], search: '', city: '' };
 
 async function loadGuests() {
-  const supabase = await getSupabase();
-  const { data, error } = await supabase.from('guests').select('*').is('deleted_at', null).order('full_name').limit(1500);
+  const database = await getDatabase();
+  const { data, error } = await database.from('guests').select('*').is('deleted_at', null).order('full_name').limit(1500);
   if (error) throw error;
   guestState.guests = data ?? [];
 }
@@ -67,18 +67,18 @@ function guestFormHtml(guest = null) {
     <label class="field field--full"><span>Preferências</span><textarea name="preferences" maxlength="2000">${escapeHtml(guest?.preferences || '')}</textarea></label>
     <label class="field field--full"><span>Necessidades de acessibilidade</span><textarea name="accessibility_needs" maxlength="2000">${escapeHtml(guest?.accessibility_needs || '')}</textarea></label>
     <label class="field field--full"><span>Observações internas</span><textarea name="internal_notes" maxlength="3000">${escapeHtml(guest?.internal_notes || '')}</textarea></label>
-    <label class="field field--full"><span>Documento digital (PDF, JPG ou PNG; até 10 MB)</span><input name="document_file" type="file" accept="application/pdf,image/jpeg,image/png"><small>O arquivo será armazenado de forma privada e acessível somente por URL temporária.</small></label>
+    <label class="field field--full"><span>Documento digital (PDF, JPG ou PNG; até 10 MB)</span><input name="document_file" type="file" accept="application/pdf,image/jpeg,image/png"><small>O arquivo será armazenado de forma privada no MySQL e exige login para ser aberto.</small></label>
   </div><div class="form-actions"><button type="button" class="button button--secondary" id="guest-form-cancel">Cancelar</button><button type="submit" class="button button--primary">${guest ? 'Salvar alterações' : 'Cadastrar hóspede'}</button></div></form>`;
 }
 
 async function detectDuplicate(payload, currentId = null) {
-  const supabase = await getSupabase();
+  const database = await getDatabase();
   const checks = [];
   const documentNormalized = String(payload.document_number || '').replace(/[^a-z0-9]/gi, '').toUpperCase();
   const phoneNormalized = String(payload.phone || '').replace(/\D/g, '');
-  if (documentNormalized) checks.push(supabase.from('guests').select('id, full_name').eq('document_type', payload.document_type).eq('document_number_normalized', documentNormalized).is('deleted_at', null).limit(1));
-  if (phoneNormalized) checks.push(supabase.from('guests').select('id, full_name').eq('phone_normalized', phoneNormalized).is('deleted_at', null).limit(1));
-  if (payload.email) checks.push(supabase.from('guests').select('id, full_name').ilike('email', payload.email).is('deleted_at', null).limit(1));
+  if (documentNormalized) checks.push(database.from('guests').select('id, full_name').eq('document_type', payload.document_type).eq('document_number_normalized', documentNormalized).is('deleted_at', null).limit(1));
+  if (phoneNormalized) checks.push(database.from('guests').select('id, full_name').eq('phone_normalized', phoneNormalized).is('deleted_at', null).limit(1));
+  if (payload.email) checks.push(database.from('guests').select('id, full_name').ilike('email', payload.email).is('deleted_at', null).limit(1));
   const results = await Promise.all(checks);
   for (const result of results) {
     if (result.error) throw result.error;
@@ -93,10 +93,11 @@ async function uploadGuestDocument(guestId, file) {
   if (file.size > 10 * 1024 * 1024) throw new Error('O arquivo excede o limite de 10 MB.');
   const safeName = file.name.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-zA-Z0-9._-]/g, '-').slice(-120);
   const path = `${guestId}/${crypto.randomUUID()}-${safeName}`;
-  const signed = await backendFetch('/storage/signed-upload', { method: 'POST', body: JSON.stringify({ bucket: 'guest-documents', path }) });
-  const supabase = await getSupabase();
-  const { error } = await supabase.storage.from('guest-documents').uploadToSignedUrl(path, signed.token, file, { contentType: file.type, upsert: false });
-  if (error) throw error;
+  const body = new FormData();
+  body.append('bucket', 'guest-documents');
+  body.append('path', path);
+  body.append('file', file, file.name);
+  await backendFetch('/storage/upload', { method: 'POST', body });
   return path;
 }
 
@@ -137,14 +138,14 @@ export function openGuestForm(guestId = null, options = {}) {
         };
         const duplicate = await detectDuplicate(payload, guest?.id);
         if (duplicate) throw new Error(`Possível cadastro duplicado: ${duplicate.full_name}. Consulte o registro existente antes de continuar.`);
-        const supabase = await getSupabase();
-        const query = guest ? supabase.from('guests').update(payload).eq('id', guest.id).select().single() : supabase.from('guests').insert(payload).select().single();
+        const database = await getDatabase();
+        const query = guest ? database.from('guests').update(payload).eq('id', guest.id).select().single() : database.from('guests').insert(payload).select().single();
         const { data: saved, error } = await query;
         if (error) throw error;
         const file = form.elements.document_file.files[0];
         if (file) {
           const documentPath = await uploadGuestDocument(saved.id, file);
-          const { error: pathError } = await supabase.from('guests').update({ document_path: documentPath }).eq('id', saved.id);
+          const { error: pathError } = await database.from('guests').update({ document_path: documentPath }).eq('id', saved.id);
           if (pathError) throw pathError;
         }
         toast(guest ? 'Dados do hóspede atualizados.' : 'Hóspede cadastrado com sucesso.'); closeDrawer();
@@ -158,8 +159,8 @@ export function openGuestForm(guestId = null, options = {}) {
 async function downloadDocument(guest) {
   if (!guest.document_path) return;
   try {
-    const { signedUrl } = await backendFetch('/storage/signed-download', { method: 'POST', body: JSON.stringify({ bucket: 'guest-documents', path: guest.document_path }) });
-    window.open(signedUrl, '_blank', 'noopener,noreferrer');
+    const { url } = await backendFetch('/storage/download-url', { method: 'POST', body: JSON.stringify({ bucket: 'guest-documents', path: guest.document_path }) });
+    window.open(url, '_blank', 'noopener,noreferrer');
   } catch (error) { toast(friendlyError(error), { title: 'Documento indisponível', type: 'error' }); }
 }
 
@@ -170,9 +171,9 @@ function startReservation(guestId) {
 async function openGuestDetails(id) {
   const guest = guestState.guests.find((item) => item.id === id);
   if (!guest) return;
-  const supabase = await getSupabase();
-  await supabase.rpc('record_sensitive_access', { p_table_name: 'guests', p_record_id: guest.id, p_context: 'guest_details' });
-  const { data: history, error } = await supabase.from('reservation_overview').select('id, code, check_in_at, check_out_at, room_number, total_amount, status').eq('responsible_guest_id', guest.id).order('check_in_at', { ascending: false }).limit(30);
+  const database = await getDatabase();
+  await database.rpc('record_sensitive_access', { p_table_name: 'guests', p_record_id: guest.id, p_context: 'guest_details' });
+  const { data: history, error } = await database.from('reservation_overview').select('id, code, check_in_at, check_out_at, room_number, total_amount, status').eq('responsible_guest_id', guest.id).order('check_in_at', { ascending: false }).limit(30);
   const historyItems = error ? [] : (history ?? []);
   openDrawer({ title: guest.full_name, eyebrow: 'Perfil do hóspede', content: `<div class="detail-actions"><button class="button button--primary button--small" id="guest-detail-reservation">Iniciar reserva</button><button class="button button--secondary button--small" id="guest-detail-edit">Editar dados</button>${guest.document_path ? '<button class="button button--secondary button--small" id="guest-detail-document">Abrir documento</button>' : ''}</div>
     <div class="alert alert--warning">Dados pessoais: consulte somente quando necessário para a operação.</div><div class="detail-grid"><div class="detail-item"><small>Documento</small><strong>${escapeHtml(guest.document_number || 'Não informado')}</strong></div><div class="detail-item"><small>Nascimento</small><strong>${formatDate(guest.birth_date)}</strong></div><div class="detail-item"><small>Telefone</small><strong>${escapeHtml(formatPhone(guest.phone || '') || 'Não informado')}</strong></div><div class="detail-item"><small>E-mail</small><strong>${escapeHtml(guest.email || 'Não informado')}</strong></div><div class="detail-item detail-item--full"><small>Endereço</small><strong>${escapeHtml([guest.street, guest.address_number, guest.neighborhood, guest.city, guest.state].filter(Boolean).join(', ') || 'Não informado')}</strong></div><div class="detail-item"><small>Nacionalidade</small><strong>${escapeHtml(guest.nationality || '—')}</strong></div><div class="detail-item"><small>Contato de emergência</small><strong>${escapeHtml([guest.emergency_contact_name, formatPhone(guest.emergency_contact_phone || '')].filter(Boolean).join(' · ') || '—')}</strong></div>${guest.preferences ? `<div class="detail-item detail-item--full"><small>Preferências</small><strong>${escapeHtml(guest.preferences)}</strong></div>` : ''}${guest.accessibility_needs ? `<div class="detail-item detail-item--full"><small>Acessibilidade</small><strong>${escapeHtml(guest.accessibility_needs)}</strong></div>` : ''}${guest.internal_notes ? `<div class="detail-item detail-item--full"><small>Observações internas</small><strong>${escapeHtml(guest.internal_notes)}</strong></div>` : ''}</div>

@@ -1,58 +1,94 @@
-# Deploy na Hostinger
+# Deploy na Hostinger com GitHub
 
-O projeto deve ser implantado como **aplicação Node.js**, não como site estático, porque as operações administrativas e as URLs temporárias do Storage rodam no Express.
+Este projeto é uma aplicação **Express/Node.js**. Não copie apenas `public/` para `public_html`: isso deixaria sem autenticação, API e banco.
 
-## Requisitos do plano
+## Requisitos
 
-- Plano Hostinger com suporte a aplicações Node.js.
+- Plano Hostinger compatível com Node.js Web Apps.
 - Node.js 20 ou superior.
-- Um domínio/subdomínio apontado para o site.
-- Projeto Supabase configurado e migrations aplicadas.
+- Banco MySQL criado e `database/mysql/001_install.sql` importado.
+- Repositório GitHub privado com `package.json` na raiz.
 
-## Arquivo de implantação
+## 1. Enviar ao GitHub
 
-Envie o código-fonte sem `.env`, `node_modules`, logs ou arquivos ZIP anteriores. O `package.json` informa:
+Na pasta `constantinos-hotel`:
 
-- instalação: `npm install`;
-- entrada: `src/server.js`;
-- inicialização: `npm start`;
-- Node.js: 20+.
+```bash
+git init
+git add .
+git commit -m "Sistema Constantinos Hotel com MySQL"
+git branch -M main
+git remote add origin https://github.com/SEU-USUARIO/constantinos-hotel.git
+git push -u origin main
+```
 
-## Deploy contínuo pelo GitHub
+O `.gitignore` já exclui `.env`, `node_modules`, ZIPs e logs. Antes do push, confirme com `git status` que `.env` não aparece.
 
-Crie um repositório privado com `package.json` na raiz e conecte-o em **Websites → Add Website → Deploy Web App → Import Git Repository**. Selecione a branch `main` e confirme:
+## 2. Conectar na Hostinger
 
-- framework: Express;
-- package manager: npm;
-- entrada: `src/server.js`;
-- inicialização: `npm start`;
-- diretório raiz, build e output: vazios.
+No hPanel:
 
-Não envie `.env`, `node_modules` ou chaves do Supabase ao repositório. A cada alteração, faça commit e push para a branch conectada para iniciar uma nova implantação.
+1. Abra **Websites → Add Website**.
+2. Escolha **Node.js Web App / Deploy Web App**.
+3. Selecione **Import Git repository / Continue with GitHub**.
+4. Autorize a Hostinger somente para o repositório necessário.
+5. Escolha o repositório e a branch `main`.
+6. Confirme Express/Node.js e a entrada `src/server.js` se a detecção pedir.
+7. Não informe diretório de saída: o Express serve `public/` diretamente.
 
-## Variáveis de ambiente da aplicação
+O `package.json` já define Node.js 20+, `npm start` e a entrada correta. A plataforma instala as dependências pelo lockfile.
 
-Configure no ambiente Node.js da Hostinger:
+## 3. Cadastrar variáveis
+
+Em **Environment Variables**, adicione todas as variáveis do arquivo `.env.example` com os valores reais. Não adicione `PORT` se a plataforma fornecer essa variável automaticamente; o código respeita o valor injetado pela hospedagem.
+
+Variáveis obrigatórias em produção:
 
 ```text
 NODE_ENV=production
-APP_URL=https://seu-dominio
-SUPABASE_URL=https://SEU-PROJETO.supabase.co
-SUPABASE_PUBLISHABLE_KEY=sb_publishable_...
-SUPABASE_SECRET_KEY=sb_secret_...
-STORAGE_GUEST_DOCUMENTS_BUCKET=guest-documents
-STORAGE_RECEIPTS_BUCKET=receipts
-SIGNED_URL_TTL_SECONDS=300
+APP_URL=https://seu-dominio.com.br
+MYSQL_HOST=localhost
+MYSQL_PORT=3306
+MYSQL_DATABASE=nome_completo_do_banco
+MYSQL_USER=nome_completo_do_usuario
+MYSQL_PASSWORD=senha_do_banco
+MYSQL_SSL=false
+SESSION_SECRET=chave_aleatoria_de_32_ou_mais_caracteres
 TRUST_PROXY=1
 ```
 
-Não envie o `.env` dentro do arquivo de deploy. Configure os valores no painel/ambiente protegido da aplicação.
+## 4. Primeiro deploy e administrador
 
-## Verificação após publicar
+Inicie o deploy e confira os logs. A aplicação só ficará funcional depois de:
 
-1. `GET /api/health` deve responder `200` e `database: available`.
-2. A página inicial deve exibir “Constantino’s Hotel”.
-3. Faça login com o administrador inicial.
-4. Crie duas reservas conflitantes para o mesmo quarto: a segunda deve ser recusada.
-5. Teste check-in, check-out e atualização da limpeza em duas abas.
-6. Confirme que documentos abrem apenas por link temporário e sem sessão anônima.
+1. importar o SQL no phpMyAdmin;
+2. cadastrar as variáveis;
+3. cadastrar temporariamente `INITIAL_ADMIN_EMAIL`, `INITIAL_ADMIN_FULL_NAME` e `INITIAL_ADMIN_PASSWORD`;
+4. entrar no sistema e remover imediatamente essas três variáveis;
+5. reiniciar/redeployar sem as variáveis de bootstrap.
+
+O bootstrap só funciona quando `users` está vazia e exige senha forte. Não edite `password_hash` manualmente.
+
+## 5. Deploy automático
+
+Depois da conexão, cada `git push` na branch ligada inicia uma nova implantação:
+
+```bash
+git add .
+git commit -m "Descreva a alteração"
+git push
+```
+
+Mudanças no código não apagam o MySQL. Faça backup antes de executar uma nova migration ou alterar tabelas.
+
+## Diagnóstico
+
+| Sintoma | Verificação |
+|---|---|
+| `DATABASE_UNAVAILABLE` | Nome, usuário, senha e host do MySQL; SQL importado. |
+| `INVALID_ORIGIN` | `APP_URL` precisa ser exatamente o domínio usado, com `https://`. |
+| Login sempre falha | Administrador criado e coluna `active` igual a `1`. |
+| Erro de build | Node 20+ e `package-lock.json` enviado. |
+| Tela abre, mas API 404 | O site foi publicado como estático; refaça como Node.js Web App. |
+
+Após publicar, visite `/api/health`, faça login e teste reserva, check-in, pagamento, limpeza e documento privado.
