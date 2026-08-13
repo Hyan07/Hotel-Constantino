@@ -18,6 +18,18 @@ Envie o código-fonte sem `.env`, `node_modules`, logs ou arquivos ZIP anteriore
 - inicialização: `npm start`;
 - Node.js: 20+.
 
+## Deploy contínuo pelo GitHub
+
+Crie um repositório privado com `package.json` na raiz e conecte-o em **Websites → Add Website → Deploy Web App → Import Git Repository**. Selecione a branch `main` e confirme:
+
+- framework: Express;
+- package manager: npm;
+- entrada: `src/server.js`;
+- inicialização: `npm start`;
+- diretório raiz, build e output: vazios.
+
+Não envie `.env`, `node_modules` ou chaves do Supabase ao repositório. A cada alteração, faça commit e push para a branch conectada para iniciar uma nova implantação.
+
 ## Variáveis de ambiente da aplicação
 
 Configure no ambiente Node.js da Hostinger:

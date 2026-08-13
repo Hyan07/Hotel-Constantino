@@ -3,8 +3,31 @@ import { can, getState, setState } from '../modules/state.js';
 import { emptyState, friendlyError, toast } from '../modules/ui.js';
 import { escapeHtml, formatDate, formatMoney, formatTime, label, statusClass } from '../modules/format.js';
 
-function metric(labelText, value, hint, dot = '') {
-  return `<article class="metric-card"><div class="metric-card__label"><span>${escapeHtml(labelText)}</span><span class="metric-dot ${dot}"></span></div><strong class="metric-card__value">${escapeHtml(value)}</strong><span class="metric-card__hint">${escapeHtml(hint)}</span></article>`;
+const metricIcons = Object.freeze({
+  rooms: '<svg viewBox="0 0 24 24"><path d="M3 20v-8a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v8M3 17h18M7 10V7a2 2 0 0 1 2-2h6a2 2 0 0 1 2 2v3"/></svg>',
+  available: '<svg viewBox="0 0 24 24"><path d="M20 11a8 8 0 1 1-3.6-6.7"/><path d="m9 11 2 2 7-7"/></svg>',
+  occupied: '<svg viewBox="0 0 24 24"><circle cx="8" cy="15" r="3"/><path d="m10.2 12.8 8.3-8.3 2 2-1.5 1.5 1.5 1.5-2 2-1.5-1.5-4.8 4.8"/></svg>',
+  occupancy: '<svg viewBox="0 0 24 24"><path d="M4 19V9M10 19V5M16 19v-7M22 19V3"/></svg>'
+});
+
+function metric(labelText, value, hint, icon, tone = '') {
+  return `<article class="metric-card ${tone ? `metric-card--${tone}` : ''}"><div class="metric-card__top"><span class="metric-card__label">${escapeHtml(labelText)}</span><span class="metric-card__icon" aria-hidden="true">${icon}</span></div><strong class="metric-card__value">${escapeHtml(value)}</strong><span class="metric-card__hint"><span class="metric-card__trend">↗</span>${escapeHtml(hint)}</span></article>`;
+}
+
+function asCount(value) {
+  const count = Number(value);
+  return Number.isFinite(count) ? Math.max(0, count) : 0;
+}
+
+function percentage(value, total) {
+  if (!total) return 0;
+  return Math.min(100, Math.max(0, Math.round((value / total) * 100)));
+}
+
+function roomMixRow(labelText, value, total, color) {
+  const count = asCount(value);
+  const width = count ? Math.max(4, percentage(count, total)) : 0;
+  return `<div class="room-mix__row" style="--mix-color:${color};--mix-width:${width}%"><span class="room-mix__label"><i class="room-mix__dot"></i>${escapeHtml(labelText)}</span><span class="room-mix__track"><i class="room-mix__fill"></i></span><strong class="room-mix__value">${count}</strong></div>`;
 }
 
 async function loadDashboardData() {
@@ -80,6 +103,8 @@ export async function renderDashboard(container) {
     window.dispatchEvent(new CustomEvent('hotel:notifications', { detail: { upcoming, alerts } }));
 
     const rooms = summary.rooms ?? {};
+    const roomTotal = asCount(rooms.total);
+    const occupancyRate = Math.min(100, Math.max(0, asCount(rooms.occupancyRate)));
     container.innerHTML = `
       <div class="page-heading">
         <div><h2>Boa jornada, ${escapeHtml(getState().profile.full_name.split(' ')[0])}.</h2><p>Acompanhe a operação de hoje e antecipe os próximos movimentos.</p></div>
@@ -87,54 +112,57 @@ export async function renderDashboard(container) {
       </div>
 
       <section class="metric-grid" aria-label="Indicadores dos quartos">
-        ${metric('Total de quartos', rooms.total ?? 0, 'Quartos ativos')}
-        ${metric('Disponíveis', rooms.available ?? 0, 'Prontos para receber', 'metric-dot--gold')}
-        ${metric('Reservados', rooms.reserved ?? 0, 'Aguardando chegada', 'metric-dot--warning')}
-        ${metric('Ocupados', rooms.occupied ?? 0, 'Hospedagens ativas')}
-        ${metric('Aguardando limpeza', rooms.awaitingCleaning ?? 0, 'Prioridade da governança', 'metric-dot--warning')}
-        ${metric('Em manutenção', rooms.maintenance ?? 0, 'Temporariamente indisponíveis', 'metric-dot--danger')}
-        ${metric('Ocupação atual', `${rooms.occupancyRate ?? 0}%`, 'Quartos ocupados agora', 'metric-dot--gold')}
-        ${metric('Reservas do dia', summary.reservationsToday ?? 0, 'Criadas hoje')}
-        ${metric('Check-ins previstos', summary.checkinsToday ?? 0, 'Chegadas de hoje')}
-        ${metric('Check-outs previstos', summary.checkoutsToday ?? 0, 'Saídas de hoje')}
-        ${metric('Reservas pendentes', summary.pendingReservations ?? 0, 'Precisam de atenção', 'metric-dot--warning')}
-        ${metric('Pagamentos pendentes', alerts.length, 'Reservas ativas com saldo', alerts.length ? 'metric-dot--danger' : '')}
+        ${metric('Total de quartos', roomTotal, 'Inventário ativo', metricIcons.rooms)}
+        ${metric('Disponíveis', asCount(rooms.available), 'Prontos para receber', metricIcons.available, 'green')}
+        ${metric('Ocupados', asCount(rooms.occupied), 'Hospedagens em andamento', metricIcons.occupied, 'amber')}
+        ${metric('Ocupação atual', `${occupancyRate}%`, 'Percentual neste momento', metricIcons.occupancy, 'coral')}
+      </section>
+
+      <section class="dashboard-overview-grid">
+        <article class="panel panel--overview">
+          <header class="panel__header"><div><h3>Visão operacional dos quartos</h3><p>Distribuição atual da capacidade do hotel</p></div><button class="button button--ghost button--small" data-dashboard-action="room-status">Ver quartos</button></header>
+          <div class="panel__body">
+            <div class="overview-layout">
+              <div class="occupancy-ring" style="--occupancy:${occupancyRate}%"><div class="occupancy-ring__copy"><strong>${occupancyRate}%</strong><span>de ocupação</span></div></div>
+              <div class="room-mix" aria-label="Distribuição dos quartos por situação">
+                ${roomMixRow('Disponíveis', rooms.available, roomTotal, '#00b69b')}
+                ${roomMixRow('Reservados', rooms.reserved, roomTotal, '#f4a340')}
+                ${roomMixRow('Ocupados', rooms.occupied, roomTotal, '#4880ff')}
+                ${roomMixRow('Aguardando limpeza', rooms.awaitingCleaning, roomTotal, '#8b72e8')}
+                ${roomMixRow('Em manutenção', rooms.maintenance, roomTotal, '#ef476f')}
+              </div>
+            </div>
+            <div class="mini-metric-row">
+              <div class="mini-metric"><strong>${asCount(summary.reservationsToday)}</strong><span>Reservas hoje</span></div>
+              <div class="mini-metric"><strong>${asCount(summary.checkinsToday)}</strong><span>Check-ins previstos</span></div>
+              <div class="mini-metric"><strong>${asCount(summary.checkoutsToday)}</strong><span>Check-outs previstos</span></div>
+              <div class="mini-metric"><strong>${asCount(summary.pendingReservations)}</strong><span>Reservas pendentes</span></div>
+            </div>
+          </div>
+        </article>
+
+        <article class="panel">
+          <header class="panel__header"><div><h3>Atalhos da operação</h3><p>Ações frequentes da recepção</p></div></header>
+          <div class="panel__body"><div class="quick-actions">
+            ${can('admin', 'reception') ? `
+              <button class="quick-action" data-dashboard-action="new-reservation"><span class="quick-action__icon">+</span><span><strong>Nova reserva</strong><small>Consultar período e cadastrar</small></span></button>
+              <button class="quick-action" data-dashboard-action="new-guest"><span class="quick-action__icon">◎</span><span><strong>Novo hóspede</strong><small>Cadastrar com segurança</small></span></button>
+              <button class="quick-action" data-dashboard-action="check-in"><span class="quick-action__icon">→</span><span><strong>Realizar check-in</strong><small>Ver chegadas confirmadas</small></span></button>
+              <button class="quick-action" data-dashboard-action="check-out"><span class="quick-action__icon">←</span><span><strong>Realizar check-out</strong><small>Ver hospedagens ativas</small></span></button>` : ''}
+            <button class="quick-action" data-dashboard-action="room-status"><span class="quick-action__icon">▦</span><span><strong>Situação dos quartos</strong><small>Disponibilidade e limpeza</small></span></button>
+          </div></div>
+        </article>
       </section>
 
       <section class="dashboard-grid">
-        <div class="stack">
-          <article class="panel">
-            <header class="panel__header"><div><h3>Próximas chegadas e saídas</h3><p>Agenda dos próximos sete dias</p></div><button class="button button--ghost button--small" data-dashboard-action="check-in">Ver reservas</button></header>
-            <div class="panel__body">${upcomingHtml(upcoming)}</div>
-          </article>
-          <article class="panel">
-            <header class="panel__header"><div><h3>Pagamentos que pedem atenção</h3><p>Saldos pendentes ou parciais</p></div></header>
-            <div class="panel__body">${alertsHtml(alerts)}</div>
-          </article>
-        </div>
-        <aside class="stack">
-          <article class="panel">
-            <header class="panel__header"><div><h3>Atalhos da operação</h3><p>Ações frequentes da recepção</p></div></header>
-            <div class="panel__body"><div class="quick-actions">
-              ${can('admin', 'reception') ? `
-                <button class="quick-action" data-dashboard-action="new-reservation"><span class="quick-action__icon">+</span><span><strong>Nova reserva</strong><small>Consultar período e cadastrar</small></span></button>
-                <button class="quick-action" data-dashboard-action="new-guest"><span class="quick-action__icon">♙</span><span><strong>Novo hóspede</strong><small>Cadastrar com segurança</small></span></button>
-                <button class="quick-action" data-dashboard-action="check-in"><span class="quick-action__icon">→</span><span><strong>Realizar check-in</strong><small>Ver chegadas confirmadas</small></span></button>
-                <button class="quick-action" data-dashboard-action="check-out"><span class="quick-action__icon">←</span><span><strong>Realizar check-out</strong><small>Ver hospedagens ativas</small></span></button>` : ''}
-              <button class="quick-action" data-dashboard-action="room-status"><span class="quick-action__icon">▤</span><span><strong>Situação dos quartos</strong><small>Disponibilidade e limpeza</small></span></button>
-            </div></div>
-          </article>
-          <article class="panel">
-            <header class="panel__header"><div><h3>Leitura rápida</h3><p>Estado atual da hospedagem</p></div></header>
-            <div class="panel__body">
-              <div class="detail-grid">
-                <div class="detail-item"><small>Capacidade disponível</small><strong>${Math.max(0, (rooms.total ?? 0) - (rooms.occupied ?? 0) - (rooms.maintenance ?? 0))} quartos</strong></div>
-                <div class="detail-item"><small>Fila de limpeza</small><strong>${rooms.awaitingCleaning ?? 0} quartos</strong></div>
-              </div>
-              ${(rooms.awaitingCleaning ?? 0) > 0 ? '<div class="alert alert--warning">Há quartos aguardando limpeza. Priorize-os antes das próximas chegadas.</div>' : '<div class="alert alert--success">Não há quartos aguardando limpeza neste momento.</div>'}
-            </div>
-          </article>
-        </aside>
+        <article class="panel">
+          <header class="panel__header"><div><h3>Próximas chegadas e saídas</h3><p>Agenda dos próximos sete dias</p></div><button class="button button--ghost button--small" data-dashboard-action="check-in">Ver reservas</button></header>
+          <div class="panel__body">${upcomingHtml(upcoming)}</div>
+        </article>
+        <article class="panel">
+          <header class="panel__header"><div><h3>Pagamentos que pedem atenção</h3><p>${alerts.length} reserva(s) com saldo pendente ou parcial</p></div></header>
+          <div class="panel__body">${alertsHtml(alerts)}</div>
+        </article>
       </section>`;
     bindDashboardActions(container);
   } catch (error) {

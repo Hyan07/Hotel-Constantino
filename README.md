@@ -12,6 +12,7 @@ Aplicação web interna para a operação do Constantino’s Hotel, em Passos–
 - Supabase Auth com perfis de administrador, recepção, governança/limpeza e consulta.
 - RLS em todas as tabelas expostas, funções protegidas e auditoria de alterações/acessos sensíveis.
 - Back-end Node.js/Express para administração de usuários, URLs temporárias de arquivos e operações com chave secreta.
+- Interface inspirada no DashStack, com sidebar clara, cards de indicadores, painel visual de ocupação e identidade azul do hotel.
 - Layout sem rolagem horizontal no celular, tabelas em cartões, navegação móvel e suporte a teclado.
 
 ## Arquitetura
