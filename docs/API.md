@@ -1,54 +1,52 @@
-# API protegida
+# API REST
 
-Todas as respostas JSON usam `{ "ok": true, "data": ... }` ou `{ "ok": false, "error": ... }`.
+Base: `/api/v1`. Saúde permanece em `/api/health`, `/api/health/live` e `/api/health/ready`.
 
-## Sessão
+Sucesso usa `{ "data": ..., "meta": ... }`; listagens incluem paginação. Erros usam:
 
-| Método | Rota | Acesso | Finalidade |
-|---|---|---|---|
-| POST | `/api/auth/login` | Público, limitado | Valida e-mail/senha e cria cookie `HttpOnly`. |
-| GET | `/api/auth/session` | Autenticado | Retorna usuário e perfil atuais. |
-| POST | `/api/auth/logout` | Público | Invalida o cookie local. |
-| GET | `/api/config` | Público | Nome, fuso e tipo do banco; não expõe credenciais. |
-| GET | `/api/health` | Público | Testa processo e conexão MySQL. |
+```json
+{
+  "error": {
+    "code": "VALIDATION_ERROR",
+    "message": "Dados inválidos.",
+    "requestId": "identificador-para-suporte",
+    "details": []
+  }
+}
+```
 
-O navegador autentica pelo cookie `constantinos_session`, com `SameSite=Strict`, `HttpOnly` e `Secure` em produção. Não há token no `localStorage`.
+Produção nunca retorna stack trace ou SQL. `pageSize` é limitado a 100. Datas usam
+`AAAA-MM-DD`, valores monetários usam centavos inteiros e agregados mutáveis exigem `version`.
 
-## Dados e operações
+## Contratos principais
 
-| Método | Rota | Acesso | Finalidade |
-|---|---|---|---|
-| POST | `/api/data/query` | Conforme perfil/recurso | Consultas e gravações com campos e tabelas permitidos por lista fechada. |
-| POST | `/api/operations/:name` | Conforme operação | Regras transacionais de hotelaria. |
+| Método                | Caminho                                | Operação                              |
+| --------------------- | -------------------------------------- | ------------------------------------- |
+| POST                  | `/auth/login`, `/auth/logout`          | iniciar/encerrar sessão               |
+| GET                   | `/auth/me`, `/dashboard`               | identidade e visão operacional        |
+| GET/POST/PATCH/DELETE | `/guests`                              | hóspedes e arquivamento lógico        |
+| GET/POST/PATCH        | `/rooms`                               | inventário e cadastro                 |
+| POST                  | `/rooms/:id/status`                    | transição operacional                 |
+| GET/POST/PATCH        | `/reservations`                        | listar, criar e alterar reservas      |
+| POST                  | `/reservations/:id/confirm`            | confirmar                             |
+| POST                  | `/reservations/:id/cancel`, `/no-show` | encerrar sem apagar histórico         |
+| POST                  | `/reservations/:id/check-in`           | criar hospedagem e ocupar quarto      |
+| GET                   | `/stays`, `/stays/:id`                 | hospedagens e detalhe financeiro      |
+| POST                  | `/stays/:id/charges`, `/payments`      | consumos e pagamentos                 |
+| POST                  | `/stays/:id/checkout`                  | fechar hospedagem e solicitar limpeza |
+| GET/POST              | `/housekeeping`                        | tarefas de limpeza/manutenção         |
+| POST                  | `/housekeeping/:id/start`, `/complete` | executar tarefa                       |
+| GET                   | `/charges`, `/payments`                | consultar transações                  |
+| GET/POST              | `/finance`                             | lançamentos manuais                   |
+| POST                  | `/finance/:id/reverse`                 | estornar sem excluir                  |
+| GET                   | `/reports?from=...&to=...`             | indicadores do período                |
+| GET/POST/PATCH        | `/users`                               | administração de usuários             |
+| GET                   | `/users/roles`, `/audit`               | perfis e trilha auditável             |
 
-Operações disponíveis:
+Todas as rotas após `/auth` exigem sessão. Mutações exigem `X-CSRF-Token`. Criação de reserva,
+check-in, pagamento e checkout também exigem `Idempotency-Key` único; repetir a mesma chave e o
+mesmo corpo retorna a resposta original, enquanto corpo diferente retorna conflito.
 
-- `get_dashboard_summary`
-- `is_room_available`
-- `transition_reservation`
-- `change_reservation_room`
-- `update_room_cleaning`
-- `set_room_operational_status`
-- `block_room_for_maintenance`
-- `complete_room_maintenance`
-- `record_sensitive_access`
-
-Reservas são validadas e gravadas na mesma transação que bloqueia a linha do quarto com `SELECT ... FOR UPDATE`. A consulta visual de disponibilidade não substitui essa verificação final.
-
-## Usuários
-
-| Método | Rota | Perfil | Finalidade |
-|---|---|---|---|
-| GET | `/api/admin/users` | Administrador | Lista usuários sem hashes de senha. |
-| POST | `/api/admin/users` | Administrador | Cria usuário e hash `bcrypt`. |
-| PATCH | `/api/admin/users/:id/role` | Administrador | Altera perfil/estado e revoga a sessão anterior. |
-
-## Arquivos privados
-
-| Método | Rota | Perfil | Finalidade |
-|---|---|---|---|
-| POST | `/api/storage/upload` | Administrador/recepção | Recebe `multipart/form-data`, até 10 MB. |
-| POST | `/api/storage/download-url` | Administrador/recepção | Resolve um caminho privado para URL interna. |
-| GET | `/api/storage/files/:id` | Administrador/recepção | Entrega o arquivo somente com sessão válida. |
-
-Formatos permitidos: PDF, JPEG e PNG. Upload e download são auditados.
+Os códigos usuais são 200/201/204, 400 para contrato inválido, 401 sem sessão, 403 sem permissão
+ou CSRF, 404 ausente, 409 para versão/conflito/sobreposição, 422 para regra de negócio e 429 para
+limite de requisições.

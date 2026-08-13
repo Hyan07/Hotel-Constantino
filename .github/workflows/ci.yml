@@ -1,0 +1,72 @@
+name: CI
+
+on:
+  push:
+    branches: [develop, main]
+  pull_request:
+    branches: [develop, main]
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      mysql:
+        image: mysql:8.4
+        env:
+          MYSQL_ROOT_PASSWORD: root-test-only
+          MYSQL_DATABASE: constantinos_hotel_test
+          MYSQL_USER: constantinos_test
+          MYSQL_PASSWORD: test-password-only
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -uroot -proot-test-only"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=20
+
+    env:
+      NODE_ENV: test
+      PORT: 3000
+      APP_URL: http://localhost:3000
+      LOG_LEVEL: fatal
+      TRUST_PROXY: 'false'
+      DB_HOST: 127.0.0.1
+      DB_PORT: 3306
+      DB_NAME: constantinos_hotel_test
+      DB_USER: constantinos_test
+      DB_PASSWORD: test-password-only
+      DB_CONNECTION_LIMIT: 5
+      DB_SSL: 'false'
+      SESSION_SECRET: ci-session-secret-not-used-in-production-2026
+      SESSION_COOKIE_NAME: constantinos.sid
+      SESSION_TTL_HOURS: 8
+      DEV_AUTH_BYPASS: 'false'
+      ADMIN_BOOTSTRAP_ENABLED: 'false'
+      RUN_DB_TESTS: 'true'
+
+    steps:
+      - name: Baixar código
+        uses: actions/checkout@v4
+
+      - name: Configurar Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Instalar dependências
+        run: npm ci
+
+      - name: Aplicar migrations no banco isolado
+        run: npm run db:migrate
+
+      - name: Validar código, testes e build
+        run: npm run check
+
+      - name: Auditar dependências de produção
+        run: npm audit --omit=dev --audit-level=high
