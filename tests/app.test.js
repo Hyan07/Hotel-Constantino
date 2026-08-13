@@ -2,12 +2,9 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 process.env.NODE_ENV = 'test';
-process.env.MYSQL_HOST = '127.0.0.1';
-process.env.MYSQL_PORT = '3306';
-process.env.MYSQL_DATABASE = 'constantinos_test';
-process.env.MYSQL_USER = 'test';
-process.env.MYSQL_PASSWORD = 'test-password';
-process.env.SESSION_SECRET = 'test-session-secret-with-more-than-32-characters';
+process.env.SUPABASE_URL = 'https://example.supabase.co';
+process.env.SUPABASE_PUBLISHABLE_KEY = 'sb_publishable_test_value';
+process.env.SUPABASE_SECRET_KEY = 'sb_secret_test_value_for_server_only';
 
 const [{ createApp }, requestModule] = await Promise.all([
   import('../src/app.js'),
@@ -15,11 +12,10 @@ const [{ createApp }, requestModule] = await Promise.all([
 ]);
 const request = requestModule.default;
 
-test('public config identifies MySQL without exposing credentials', async () => {
+test('public config exposes publishable data but never the secret key', async () => {
   const response = await request(createApp()).get('/api/config').expect(200);
-  assert.equal(response.body.database, 'mysql');
-  assert.equal(JSON.stringify(response.body).includes('test-password'), false);
-  assert.equal(JSON.stringify(response.body).includes('constantinos_test'), false);
+  assert.equal(response.body.supabasePublishableKey, 'sb_publishable_test_value');
+  assert.equal(JSON.stringify(response.body).includes('sb_secret_test_value'), false);
   assert.match(response.headers['cache-control'], /no-store/);
 });
 
@@ -37,12 +33,4 @@ test('security headers are enabled', async () => {
   const response = await request(createApp()).get('/api/config').expect(200);
   assert.equal(response.headers['x-content-type-options'], 'nosniff');
   assert.match(response.headers['content-security-policy'], /default-src 'self'/);
-});
-
-test('mutating API requests reject a foreign origin', async () => {
-  const response = await request(createApp())
-    .post('/api/auth/logout')
-    .set('Origin', 'https://attacker.example')
-    .expect(403);
-  assert.equal(response.body.error.code, 'INVALID_ORIGIN');
 });

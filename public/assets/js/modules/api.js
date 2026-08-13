@@ -1,11 +1,13 @@
+import { getState } from './state.js';
+
 export async function backendFetch(path, options = {}) {
-  const isFormData = options.body instanceof FormData;
+  const token = getState().session?.access_token;
   const response = await fetch(`/api${path}`, {
     ...options,
-    credentials: 'same-origin',
     headers: {
       Accept: 'application/json',
-      ...(options.body && !isFormData ? { 'Content-Type': 'application/json' } : {}),
+      ...(options.body ? { 'Content-Type': 'application/json' } : {}),
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
       ...options.headers
     }
   });

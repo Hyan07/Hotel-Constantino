@@ -75,11 +75,10 @@ export function pageLoading(label = 'Carregando…') {
 
 export function friendlyError(error) {
   const code = error?.code ?? error?.error?.code;
-  if (['RESERVATION_OVERLAP', 'MAINTENANCE_OVERLAP'].includes(code)) return 'Este quarto não está disponível no período selecionado.';
-  if (['DUPLICATE_RECORD', 'DUPLICATE_EMAIL', 'DUPLICATE_FILE'].includes(code)) return 'Já existe um cadastro com estes dados.';
-  if (code === 'FORBIDDEN' || /permission|policy|permissão/i.test(error?.message ?? '')) return 'Você não tem permissão para concluir esta ação.';
-  if (code === 'NOT_FOUND') return 'Registro não encontrado.';
-  if (code === 'DATABASE_UNAVAILABLE') return 'O banco MySQL está indisponível. Confira a configuração da hospedagem.';
+  if (code === '23P01') return 'Este quarto já possui uma reserva ativa no período selecionado.';
+  if (code === '23505') return 'Já existe um cadastro com estes dados.';
+  if (code === '42501' || /permission|policy|permissão/i.test(error?.message ?? '')) return 'Você não tem permissão para concluir esta ação.';
+  if (code === 'PGRST116') return 'Registro não encontrado.';
   if (/Failed to fetch|NetworkError/i.test(error?.message ?? '')) return 'Não foi possível conectar ao servidor. Verifique sua internet.';
   return error?.message ?? error?.error?.message ?? 'Não foi possível concluir a operação.';
 }

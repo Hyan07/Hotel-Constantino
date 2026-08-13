@@ -5,8 +5,8 @@ import { fileURLToPath } from 'node:url';
 const projectRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const required = [
   'public/index.html', 'src/server.js', '.env.example',
-  'database/mysql/001_install.sql', 'src/lib/db.js', 'src/routes/auth.js',
-  'src/services/data-query.js', 'README.md'
+  'supabase/migrations/001_schema.sql', 'supabase/migrations/002_functions_triggers.sql',
+  'supabase/migrations/003_rls_storage.sql', 'README.md'
 ];
 
 const failures = [];
@@ -24,22 +24,20 @@ function walk(directory) {
 
 for (const file of walk(path.join(projectRoot, 'public'))) {
   const content = fs.readFileSync(file, 'utf8');
-  if (/MYSQL_(PASSWORD|USER|HOST|DATABASE)/.test(content)) failures.push(`Credencial MySQL exposta no front-end: ${path.relative(projectRoot, file)}`);
-  if (/password_hash/.test(content)) failures.push(`Hash de senha exposto no front-end: ${path.relative(projectRoot, file)}`);
+  if (/sb_secret_[a-zA-Z0-9_-]+/.test(content)) failures.push(`Chave secreta encontrada no front-end: ${path.relative(projectRoot, file)}`);
+  if (/SUPABASE_SECRET_KEY/.test(content)) failures.push(`Nome de variável secreta exposto no front-end: ${path.relative(projectRoot, file)}`);
 }
 
-const schema = fs.readFileSync(path.join(projectRoot, 'database/mysql/001_install.sql'), 'utf8');
-const dataService = fs.readFileSync(path.join(projectRoot, 'src/services/data-query.js'), 'utf8');
-const authMiddleware = fs.readFileSync(path.join(projectRoot, 'src/middleware/auth.js'), 'utf8');
-for (const table of ['users','guests','rooms','reservations','payments','maintenance','audit_logs','private_files']) {
-  if (!schema.includes(`CREATE TABLE IF NOT EXISTS ${table}`)) failures.push(`Tabela MySQL ausente: ${table}.`);
+const schema = fs.readFileSync(path.join(projectRoot, 'supabase/migrations/001_schema.sql'), 'utf8');
+const rls = fs.readFileSync(path.join(projectRoot, 'supabase/migrations/003_rls_storage.sql'), 'utf8');
+if (!schema.includes('reservations_no_active_overlap')) failures.push('Restrição contra reservas sobrepostas não encontrada.');
+for (const table of ['profiles','guests','rooms','reservations','payments','maintenance','audit_logs']) {
+  if (!rls.includes(`alter table public.${table} enable row level security`)) failures.push(`RLS não habilitada para ${table}.`);
 }
-if (!dataService.includes('FOR UPDATE') || !dataService.includes('RESERVATION_OVERLAP')) failures.push('Bloqueio transacional contra sobreposição não encontrado.');
-if (!authMiddleware.includes('verifySessionToken')) failures.push('Autenticação de sessão do servidor não encontrada.');
 
 if (failures.length) {
   console.error(failures.join('\n'));
   process.exit(1);
 }
 
-console.log('Estrutura MySQL, segredos e controles transacionais verificados.');
+console.log('Estrutura, segredos e controles de banco verificados.');

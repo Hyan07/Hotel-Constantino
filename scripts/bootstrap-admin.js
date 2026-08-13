@@ -1,6 +1,5 @@
-import bcrypt from 'bcryptjs';
 import crypto from 'node:crypto';
-import { closePool, query } from '../src/lib/db.js';
+import { supabaseAdmin } from '../src/lib/supabase.js';
 
 const email = process.env.INITIAL_ADMIN_EMAIL?.trim().toLowerCase();
 const fullName = process.env.INITIAL_ADMIN_FULL_NAME?.trim();
@@ -22,19 +21,28 @@ if (!strongPassword) {
   process.exit(1);
 }
 
-try {
-  const passwordHash = await bcrypt.hash(password, 12);
-  await query(
-    `INSERT INTO users (id, email, password_hash, full_name, role, active)
-     VALUES (?, ?, ?, ?, 'admin', 1)`,
-    [crypto.randomUUID(), email, passwordHash, fullName]
-  );
-  console.log(`Administrador criado com sucesso: ${email}.`);
-  console.log('A senha não foi gravada nem exibida. Remova as variáveis temporárias do ambiente.');
-} catch (error) {
-  if (error.code === 'ER_DUP_ENTRY') console.error('Já existe um usuário com este e-mail.');
-  else console.error(`Não foi possível criar o administrador: ${error.message}`);
-  process.exitCode = 1;
-} finally {
-  await closePool();
+const { data, error } = await supabaseAdmin.auth.admin.createUser({
+  email,
+  password,
+  email_confirm: true,
+  user_metadata: { full_name: fullName }
+});
+
+if (error) {
+  console.error(`Não foi possível criar o administrador: ${error.message}`);
+  process.exit(1);
 }
+
+const { error: profileError } = await supabaseAdmin
+  .from('profiles')
+  .update({ full_name: fullName, role: 'admin', active: true })
+  .eq('id', data.user.id);
+
+if (profileError) {
+  await supabaseAdmin.auth.admin.deleteUser(data.user.id);
+  console.error(`O usuário foi revertido porque o perfil não pôde ser configurado: ${profileError.message}`);
+  process.exit(1);
+}
+
+console.log(`Administrador criado com sucesso: ${email} (${crypto.randomUUID().slice(0, 8)}).`);
+console.log('A senha não foi gravada nem exibida. Remova as variáveis temporárias do ambiente.');

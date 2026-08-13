@@ -1,4 +1,4 @@
-import { getDatabase } from '../modules/database.js';
+import { getSupabase } from '../modules/supabase.js';
 import { can } from '../modules/state.js';
 import {
   closeDrawer, emptyState, friendlyError, openDrawer, setDrawerBusy,
@@ -23,11 +23,11 @@ const roomState = {
 };
 
 async function loadRooms() {
-  const database = await getDatabase();
+  const supabase = await getSupabase();
   const [rooms, categories, maintenance] = await Promise.all([
-    database.from('room_overview').select('*').order('room_number'),
-    database.from('room_categories').select('*').order('name'),
-    database.from('maintenance').select('*').in('status', ['open','in_progress','waiting_parts']).order('start_at', { ascending: false })
+    supabase.from('room_overview').select('*').order('room_number'),
+    supabase.from('room_categories').select('*').order('name'),
+    supabase.from('maintenance').select('*').in('status', ['open','in_progress','waiting_parts']).order('start_at', { ascending: false })
   ]);
   if (rooms.error) throw rooms.error;
   if (categories.error) throw categories.error;
@@ -98,8 +98,8 @@ async function toggleOperationalBlock(roomId) {
   });
   if (!accepted) return;
   try {
-    const database = await getDatabase();
-    const { error } = await database.rpc('set_room_operational_status', {
+    const supabase = await getSupabase();
+    const { error } = await supabase.rpc('set_room_operational_status', {
       p_room_id: room.id, p_status: blocking ? 'blocked' : 'available', p_reason: blocking ? 'Bloqueio operacional manual' : 'Bloqueio operacional liberado'
     });
     if (error) throw error;
@@ -119,8 +119,8 @@ async function updateCleaning(roomId) {
   });
   if (!accepted) return;
   try {
-    const database = await getDatabase();
-    const { error } = await database.rpc('update_room_cleaning', { p_room_id: room.id, p_cleaning_status: completing ? 'clean' : 'in_progress', p_reason: null });
+    const supabase = await getSupabase();
+    const { error } = await supabase.rpc('update_room_cleaning', { p_room_id: room.id, p_cleaning_status: completing ? 'clean' : 'in_progress', p_reason: null });
     if (error) throw error;
     toast(completing ? `Quarto ${room.room_number} liberado.` : `Limpeza do quarto ${room.room_number} iniciada.`);
     await refreshRooms();
@@ -167,8 +167,8 @@ function openRoomForm(roomId = null) {
           amenities: form.elements.amenities.value.split(',').map((item) => item.trim()).filter(Boolean),
           description: form.elements.description.value.trim() || null, internal_notes: form.elements.internal_notes.value.trim() || null
         };
-        const database = await getDatabase();
-        const query = room ? database.from('rooms').update(payload).eq('id', room.id) : database.from('rooms').insert(payload);
+        const supabase = await getSupabase();
+        const query = room ? supabase.from('rooms').update(payload).eq('id', room.id) : supabase.from('rooms').insert(payload);
         const { error } = await query;
         if (error) throw error;
         toast(room ? 'Quarto atualizado com sucesso.' : 'Quarto cadastrado com sucesso.'); closeDrawer(); await refreshRooms();
@@ -187,8 +187,8 @@ function openMaintenanceForm(roomId) {
     form.addEventListener('submit', async (event) => {
       event.preventDefault(); if (!form.reportValidity()) return; setDrawerBusy(true, 'Bloqueando…');
       try {
-        const database = await getDatabase();
-        const { error } = await database.rpc('block_room_for_maintenance', {
+        const supabase = await getSupabase();
+        const { error } = await supabase.rpc('block_room_for_maintenance', {
           p_room_id: room.id, p_reason: form.elements.reason.value, p_description: form.elements.description.value || null,
           p_start_at: localInputToIso(form.elements.start_at.value),
           p_expected_release_at: form.elements.expected_release_at.value ? localInputToIso(form.elements.expected_release_at.value) : null,
@@ -205,8 +205,8 @@ async function completeMaintenance(item) {
   const accepted = await confirmAction({ title: 'Concluir manutenção', message: 'O quarto ficará aguardando limpeza antes de voltar a receber hóspedes.', confirmLabel: 'Concluir', danger: false });
   if (!accepted) return;
   try {
-    const database = await getDatabase();
-    const { error } = await database.rpc('complete_room_maintenance', { p_maintenance_id: item.id, p_notes: null });
+    const supabase = await getSupabase();
+    const { error } = await supabase.rpc('complete_room_maintenance', { p_maintenance_id: item.id, p_notes: null });
     if (error) throw error;
     toast('Manutenção concluída. O quarto está aguardando limpeza.'); closeDrawer(); await refreshRooms();
   } catch (error) { toast(friendlyError(error), { title: 'Não foi possível concluir', type: 'error' }); }

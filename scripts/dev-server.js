@@ -13,12 +13,9 @@ const api = spawn(process.execPath, ['--watch', 'src/server.js'], {
     NODE_ENV: process.env.NODE_ENV || 'development',
     PORT: process.env.API_PORT || '3000',
     APP_URL: process.env.APP_URL || 'http://localhost:4173',
-    MYSQL_HOST: process.env.MYSQL_HOST || '127.0.0.1',
-    MYSQL_PORT: process.env.MYSQL_PORT || '3306',
-    MYSQL_DATABASE: process.env.MYSQL_DATABASE || 'constantinos_hotel',
-    MYSQL_USER: process.env.MYSQL_USER || 'root',
-    MYSQL_PASSWORD: process.env.MYSQL_PASSWORD || 'local-development-password',
-    SESSION_SECRET: process.env.SESSION_SECRET || 'local-development-session-secret-change-me-123456'
+    SUPABASE_URL: process.env.SUPABASE_URL || 'https://example.supabase.co',
+    SUPABASE_PUBLISHABLE_KEY: process.env.SUPABASE_PUBLISHABLE_KEY || 'sb_publishable_local_preview',
+    SUPABASE_SECRET_KEY: process.env.SUPABASE_SECRET_KEY || 'sb_secret_local_preview_only'
   },
   stdio: 'inherit'
 });

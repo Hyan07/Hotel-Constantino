@@ -2,35 +2,30 @@
 
 ## Controles implementados
 
-- MySQL acessado somente pelo Node.js com queries parametrizadas e listas fechadas de tabelas/campos.
-- Senhas com hash `bcrypt` e custo 12; o hash nunca é retornado pela API.
-- Sessão JWT assinada em cookie `HttpOnly`, `SameSite=Strict` e `Secure` em produção.
-- Alterar ou desativar um usuário incrementa `session_version` e revoga sessões anteriores.
-- Perfis `admin`, `reception`, `housekeeping` e `viewer` verificados novamente no servidor em cada requisição.
-- Bloqueio de origem em requisições mutáveis, rate limit geral e limite específico no login.
-- Reserva conflitante bloqueada dentro de transação com lock do quarto, inclusive sob concorrência.
-- Arquivos privados em MySQL, formatos/tamanho limitados, sem diretório público e com acesso auditado.
-- Documento mascarado nas listagens e abertura dos dados completos registrada em `audit_logs`.
-- Helmet/CSP, JSON limitado, proteção contra path traversal e erros internos ocultados.
+- RLS habilitada em todas as tabelas expostas.
+- Políticas específicas por perfil e princípio do menor privilégio.
+- Todo novo usuário nasce como `viewer`; somente operação administrativa do servidor altera perfis.
+- Secret key restrita ao Node.js e validada na inicialização.
+- Buckets privados, formatos/tamanho limitados e URLs assinadas com expiração.
+- Documentos mascarados nas listagens e acesso completo registrado em `audit_logs`.
+- Auditoria automática de inserções, alterações e exclusões lógicas nas entidades críticas.
+- Senhas tratadas exclusivamente pelo Supabase Auth.
+- Helmet/CSP, limite de requisições, corpo JSON limitado e mensagens de erro sem detalhes internos.
+- Reserva conflitante bloqueada no PostgreSQL por exclusion constraint.
 
-## Responsabilidades operacionais
+## Operação recomendada
 
-- Use uma conta individual por colaborador; não compartilhe logins.
-- Desative imediatamente quem deixar a equipe.
-- Guarde `MYSQL_PASSWORD` e `SESSION_SECRET` somente nas variáveis protegidas da hospedagem.
-- Nunca envie `.env` ao GitHub, por e-mail ou em capturas de tela.
-- Use HTTPS e mantenha `APP_URL` igual ao domínio canônico.
-- Faça backups regulares e teste a restauração do banco, incluindo `private_files`.
-- Defina prazo de retenção e base legal para documentos pessoais com orientação jurídica adequada.
-- Revise usuários, auditoria e dependências pelo menos mensalmente.
+- Crie uma conta individual para cada colaborador; não compartilhe logins.
+- Revogue imediatamente acessos de quem deixar a equipe.
+- Revise mensalmente usuários, auditoria e objetos armazenados.
+- Defina política de retenção para documentos e registros conforme necessidade legal/contratual.
+- Mantenha a secret key somente no cofre de variáveis da hospedagem.
+- Ative MFA para administradores quando disponível no projeto Supabase.
+- Faça backup periódico do banco e teste restauração.
 
-## Perfis
+## Limites de acesso
 
-- `admin`: operação, usuários e auditoria.
-- `reception`: reservas, hóspedes, pagamentos, quartos e manutenção.
-- `housekeeping`: painel, quartos, limpeza e conclusão de manutenção.
-- `viewer`: painel agregado e consulta de quartos.
-
-## Limitação importante
-
-Os documentos ficam no próprio banco para sobreviver a novos deploys e permanecer fora da área pública. Isso simplifica a Hostinger, mas aumenta o tamanho dos backups. Se o volume crescer muito, migre `private_files` para um armazenamento de objetos privado sem alterar a regra de autorização da API.
+- `admin`: operação completa e administração de usuários/auditoria.
+- `reception`: reservas, hóspedes, pagamentos, check-in/out, quartos e manutenção.
+- `housekeeping`: quartos, manutenção atribuída e estados de limpeza via RPC.
+- `viewer`: painel agregado e consulta operacional de quartos, sem dados pessoais.

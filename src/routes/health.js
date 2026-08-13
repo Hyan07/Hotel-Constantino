@@ -1,28 +1,16 @@
 import { Router } from 'express';
-import { query } from '../lib/db.js';
+import { supabaseAdmin } from '../lib/supabase.js';
 
 export const healthRouter = Router();
 
 healthRouter.get('/', async (_request, response) => {
   const started = Date.now();
-  try {
-    await query('SELECT 1 AS ok');
-    response.json({
-      ok: true,
-      service: 'constantinos-hotel',
-      database: 'mysql',
-      databaseStatus: 'available',
-      responseTimeMs: Date.now() - started,
-      timestamp: new Date().toISOString()
-    });
-  } catch {
-    response.status(503).json({
-      ok: false,
-      service: 'constantinos-hotel',
-      database: 'mysql',
-      databaseStatus: 'unavailable',
-      responseTimeMs: Date.now() - started,
-      timestamp: new Date().toISOString()
-    });
-  }
+  const { error } = await supabaseAdmin.from('room_categories').select('id', { head: true, count: 'exact' }).limit(1);
+  response.status(error ? 503 : 200).json({
+    ok: !error,
+    service: 'constantinos-hotel',
+    database: error ? 'unavailable' : 'available',
+    responseTimeMs: Date.now() - started,
+    timestamp: new Date().toISOString()
+  });
 });

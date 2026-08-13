@@ -1,30 +1,30 @@
-import { query } from '../lib/db.js';
-import { readSessionCookie, verifySessionToken } from '../services/session.js';
+import { supabaseAdmin } from '../lib/supabase.js';
 import { HttpError } from '../utils/http-error.js';
 
 export async function requireAuth(request, _response, next) {
   try {
-    const token = readSessionCookie(request);
-    if (!token) {
+    const authorization = request.get('authorization') ?? '';
+    const [scheme, token] = authorization.split(' ');
+    if (scheme !== 'Bearer' || !token) {
       throw new HttpError(401, 'Sessão ausente ou inválida.', 'AUTH_REQUIRED');
     }
 
-    let payload;
-    try {
-      payload = await verifySessionToken(token);
-    } catch {
+    const { data, error } = await supabaseAdmin.auth.getUser(token);
+    if (error || !data.user) {
       throw new HttpError(401, 'Sua sessão expirou. Entre novamente.', 'INVALID_SESSION');
     }
 
-    const [profile] = await query(
-      'SELECT id, email, full_name, role, active, session_version FROM users WHERE id = ? LIMIT 1',
-      [payload.sub]
-    );
-    if (!profile || !profile.active || Number(profile.session_version) !== Number(payload.sessionVersion)) {
+    const { data: profile, error: profileError } = await supabaseAdmin
+      .from('profiles')
+      .select('id, full_name, role, active')
+      .eq('id', data.user.id)
+      .maybeSingle();
+
+    if (profileError || !profile || !profile.active) {
       throw new HttpError(403, 'Usuário sem perfil ativo.', 'PROFILE_INACTIVE');
     }
 
-    request.auth = { token, user: { id: profile.id, email: profile.email }, profile };
+    request.auth = { token, user: data.user, profile };
     next();
   } catch (error) {
     next(error);
